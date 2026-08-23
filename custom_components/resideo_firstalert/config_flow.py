@@ -19,7 +19,14 @@ from homeassistant.helpers import config_entry_oauth2_flow
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import ResideoApiClient, ResideoAuthError, ResideoConnectionError
-from .auth import AuthenticationError, ResideoAuth
+from .auth import (
+    AuthenticationError,
+    ResideoAuth,
+    build_authorize_url,
+    exchange_code_for_tokens,
+    generate_pkce_pair,
+    parse_authorization_code,
+)
 from .const import (
     CONF_REFRESH_TOKEN,
     CONF_SCAN_INTERVAL,
@@ -39,6 +46,13 @@ class ResideoOAuth2FlowHandler(
     """Handle the OAuth2 config flow for Resideo."""
 
     DOMAIN = DOMAIN
+
+    def __init__(self) -> None:
+        """Initialize the flow handler."""
+        super().__init__()
+        self._code_verifier: str | None = None
+        self._auth_state: str | None = None
+        self._authorize_url: str | None = None
 
     @staticmethod
     @callback
@@ -64,10 +78,82 @@ class ResideoOAuth2FlowHandler(
         """Handle user-initiated flow - offer choice of auth methods."""
         return self.async_show_menu(
             step_id="user",
-            menu_options=["login", "manual"],
+            menu_options=["browser", "login", "manual"],
             description_placeholders={
                 "docs_url": "https://github.com/aidenmitchell/ha-resideo-firstalert#authentication"
             },
+        )
+
+    def _new_authorize_url(self) -> str:
+        """Generate a fresh PKCE pair and authorize URL, storing flow state."""
+        self._code_verifier, code_challenge, self._auth_state = generate_pkce_pair()
+        self._authorize_url = build_authorize_url(code_challenge, self._auth_state)
+        return self._authorize_url
+
+    async def _tokens_from_pasted_code(self, pasted: str) -> dict:
+        """Turn a pasted callback URL or code into tokens."""
+        code = parse_authorization_code(pasted, self._auth_state)
+        session = async_get_clientsession(self.hass)
+        return await exchange_code_for_tokens(session, code, self._code_verifier)
+
+    async def async_step_browser(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle browser-assisted login (sign in yourself, paste the callback)."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            try:
+                tokens = await self._tokens_from_pasted_code(user_input["callback"])
+                refresh_token = tokens.get("refresh_token")
+
+                if not refresh_token:
+                    errors["base"] = "no_refresh_token"
+                else:
+                    session = async_get_clientsession(self.hass)
+                    client = ResideoApiClient(session, refresh_token)
+                    accounts = await client.get_accounts()
+                    data = accounts.get("data", {})
+                    user_id = data.get("id", "unknown")
+                    first_name = data.get("firstName", "")
+                    last_name = data.get("lastName", "")
+                    email = data.get("contactEmail", "unknown")
+
+                    await self.async_set_unique_id(user_id)
+                    self._abort_if_unique_id_configured()
+
+                    title = f"First Alert ({email})"
+                    if first_name:
+                        title = f"First Alert ({first_name} {last_name})"
+
+                    return self.async_create_entry(
+                        title=title,
+                        data={
+                            CONF_REFRESH_TOKEN: refresh_token,
+                            CONF_TOKEN: {"refresh_token": refresh_token},
+                        },
+                    )
+
+            except AuthenticationError as err:
+                _LOGGER.error("Browser login failed: %s", err)
+                errors["base"] = "auth_error"
+            except ResideoAuthError:
+                errors["base"] = "invalid_auth"
+            except ResideoConnectionError:
+                errors["base"] = "cannot_connect"
+            except Exception:
+                _LOGGER.exception("Unexpected exception during browser login")
+                errors["base"] = "unknown"
+
+        # Generate the URL once per flow so the pasted code matches its verifier.
+        if self._authorize_url is None:
+            self._new_authorize_url()
+
+        return self.async_show_form(
+            step_id="browser",
+            data_schema=vol.Schema({vol.Required("callback"): str}),
+            errors=errors,
+            description_placeholders={"authorize_url": self._authorize_url},
         )
 
     async def async_step_login(
@@ -248,7 +334,48 @@ class ResideoOAuth2FlowHandler(
         """Handle reauth confirmation - offer choice."""
         return self.async_show_menu(
             step_id="reauth_confirm",
-            menu_options=["reauth_login", "reauth_manual"],
+            menu_options=["reauth_browser", "reauth_login", "reauth_manual"],
+        )
+
+    async def async_step_reauth_browser(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle reauth via browser-assisted login."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            try:
+                tokens = await self._tokens_from_pasted_code(user_input["callback"])
+                refresh_token = tokens.get("refresh_token")
+
+                if not refresh_token:
+                    errors["base"] = "no_refresh_token"
+                else:
+                    return self.async_update_reload_and_abort(
+                        self._get_reauth_entry(),
+                        data_updates={
+                            CONF_REFRESH_TOKEN: refresh_token,
+                            CONF_TOKEN: {"refresh_token": refresh_token},
+                        },
+                    )
+
+            except AuthenticationError as err:
+                _LOGGER.error("Browser reauth failed: %s", err)
+                errors["base"] = "auth_error"
+            except ResideoConnectionError:
+                errors["base"] = "cannot_connect"
+            except Exception:
+                _LOGGER.exception("Unexpected exception during browser reauth")
+                errors["base"] = "unknown"
+
+        if self._authorize_url is None:
+            self._new_authorize_url()
+
+        return self.async_show_form(
+            step_id="reauth_browser",
+            data_schema=vol.Schema({vol.Required("callback"): str}),
+            errors=errors,
+            description_placeholders={"authorize_url": self._authorize_url},
         )
 
     async def async_step_reauth_login(

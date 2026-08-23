@@ -41,9 +41,25 @@ A custom Home Assistant integration for First Alert Safe & Sound smoke/CO detect
 
 ### Authentication
 
-When adding the integration, you have two options:
+When adding the integration, you have three options.
 
-#### Option 1: Login with Email & Password (Recommended)
+> **Note:** Resideo has enabled a bot check (captcha) on its login form. As a result, the older **"Login with email and password"** option now fails with an authentication error even when your credentials are correct, because Home Assistant cannot solve the captcha. Use **"Sign in with your browser"** instead, where you sign in in your own browser and the captcha is handled normally.
+
+#### Option 1: Sign in with your browser (Recommended)
+
+1. Go to **Settings** → **Devices & Services** → **Add Integration**
+2. Search for "First Alert by Resideo"
+3. Select **"Sign in with your browser"**
+4. Click the sign-in link shown in the dialog. It opens the Resideo login page in a new tab.
+5. Sign in with your Resideo account (the same credentials you use in the First Alert app).
+6. After signing in, the page tries to open the First Alert app and appears to stall or fail. **This is expected.**
+7. Copy the authorization code and paste it back into Home Assistant. You can paste either the full `com.resideo.firstalert://...` address the page tried to open, or just the `code` value from it.
+   - If your browser does not show that address, open developer tools (**F12**) → **Network** tab *before* signing in, then find the request whose location starts with `com.resideo.firstalert://` and copy its `code` parameter.
+8. Your devices will be automatically discovered.
+
+The authorization code is single-use and expires quickly, so paste it promptly after signing in.
+
+#### Option 2: Login with Email & Password (currently blocked by Resideo's captcha)
 
 1. Go to **Settings** → **Devices & Services** → **Add Integration**
 2. Search for "First Alert by Resideo"
@@ -51,7 +67,7 @@ When adding the integration, you have two options:
 4. Enter your Resideo account credentials (same as the First Alert app)
 5. Your devices will be automatically discovered
 
-#### Option 2: Manual Token Entry
+#### Option 3: Manual Token Entry
 
 If you prefer, you can manually obtain and enter a refresh token:
 

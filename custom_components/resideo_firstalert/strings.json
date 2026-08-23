@@ -32,8 +32,16 @@
         "title": "Connect to First Alert by Resideo",
         "description": "Choose how you want to authenticate with your Resideo account.\n\nSee the [documentation]({docs_url}) for more information.",
         "menu_options": {
-          "login": "Login with email and password (Recommended)",
+          "browser": "Sign in with your browser (Recommended)",
+          "login": "Login with email and password",
           "manual": "Enter refresh token manually"
+        }
+      },
+      "browser": {
+        "title": "Sign in with your browser",
+        "description": "Resideo now protects the login form with a bot check, so signing in directly from Home Assistant no longer works. Sign in with your own browser instead:\n\n1. [Open the Resideo sign-in page in a new tab]({authorize_url}) and sign in with your Resideo account.\n2. After you sign in, the page will try to open the First Alert app and will look like it stalls or fails. That is expected.\n3. Copy the authorization code and paste it below. You can paste either the full `com.resideo.firstalert://...` address it tried to open, or just the `code` value. If you don't see the address, open your browser's developer tools (F12) → Network tab before signing in, then find the request whose location starts with `com.resideo.firstalert://` and copy its `code`.\n\nThe code is single-use and expires quickly, so paste it right after signing in.",
+        "data": {
+          "callback": "Authorization code or callback URL"
         }
       },
       "login": {
@@ -64,8 +72,16 @@
         "title": "Reauthenticate",
         "description": "Your authentication has expired. Please choose how to reauthenticate.",
         "menu_options": {
+          "reauth_browser": "Sign in with your browser (Recommended)",
           "reauth_login": "Login with email and password",
           "reauth_manual": "Enter refresh token manually"
+        }
+      },
+      "reauth_browser": {
+        "title": "Reauthenticate with your browser",
+        "description": "1. [Open the Resideo sign-in page in a new tab]({authorize_url}) and sign in with your Resideo account.\n2. After you sign in, the page will try to open the First Alert app and will look like it stalls or fails. That is expected.\n3. Copy the authorization code and paste it below. You can paste either the full `com.resideo.firstalert://...` address it tried to open, or just the `code` value.\n\nThe code is single-use and expires quickly, so paste it right after signing in.",
+        "data": {
+          "callback": "Authorization code or callback URL"
         }
       },
       "reauth_login": {
