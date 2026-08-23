@@ -85,9 +85,15 @@ def parse_authorization_code(pasted: str, expected_state: str | None = None) -> 
     if not value:
         raise AuthenticationError("No authorization code provided")
 
-    # A pasted callback URL contains a query string; a bare code does not.
-    if "?" in value or value.lower().startswith(("com.resideo", "http")):
-        query = parse_qs(urlparse(value).query)
+    lower = value.lower()
+    looks_like_url = "://" in lower or lower.startswith(("com.resideo", "http"))
+    # A pasted callback carries query parameters; a bare code has none. Accept the
+    # full URL, a bare "code=...&state=..." fragment, or just the code on its own.
+    has_query = "?" in value or "code=" in lower or "error=" in lower
+
+    if looks_like_url or has_query:
+        query_str = urlparse(value).query if "?" in value else value
+        query = parse_qs(query_str)
         error = query.get("error", [None])[0]
         if error:
             desc = query.get("error_description", ["Unknown error"])[0]
