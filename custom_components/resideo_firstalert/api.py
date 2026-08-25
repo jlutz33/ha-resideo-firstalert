@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -107,13 +108,24 @@ class ResideoApiClient:
         self,
         session: aiohttp.ClientSession,
         refresh_token: str,
+        token_updater: Callable[[str], None] | None = None,
     ) -> None:
-        """Initialize the API client."""
+        """Initialize the API client.
+
+        token_updater, if given, is called with the new refresh token whenever
+        Resideo rotates it, so the caller can persist it for future sessions.
+        """
         self._session = session
         self._refresh_token = refresh_token
+        self._token_updater = token_updater
         self._access_token: str | None = None
         self._token_expiry: datetime | None = None
         self._lock = asyncio.Lock()
+
+    @property
+    def refresh_token(self) -> str:
+        """Return the current refresh token, which may have been rotated."""
+        return self._refresh_token
 
     async def _ensure_token(self) -> str:
         """Ensure we have a valid access token."""
@@ -140,7 +152,9 @@ class ResideoApiClient:
                 },
                 headers={"Content-Type": "application/json"},
             ) as response:
-                if response.status == 401:
+                # 401 and 403 both mean the refresh token is no longer valid
+                # (expired, revoked, or rotated away), which must trigger reauth.
+                if response.status in (401, 403):
                     raise ResideoAuthError("Invalid refresh token")
                 if response.status != 200:
                     raise ResideoApiError(
@@ -152,6 +166,18 @@ class ResideoApiClient:
                 expires_in = data.get("expires_in", 3600)
                 self._token_expiry = datetime.now() + timedelta(seconds=expires_in)
                 _LOGGER.debug("Access token refreshed, expires in %s seconds", expires_in)
+
+                # Resideo rotates the refresh token on each use. Keep the newest
+                # one and let the caller persist it, otherwise the stored token
+                # goes stale within an hour and the integration stops updating.
+                new_refresh_token = data.get("refresh_token")
+                if new_refresh_token and new_refresh_token != self._refresh_token:
+                    self._refresh_token = new_refresh_token
+                    if self._token_updater is not None:
+                        try:
+                            self._token_updater(new_refresh_token)
+                        except Exception:  # noqa: BLE001
+                            _LOGGER.exception("Failed to persist rotated refresh token")
 
         except aiohttp.ClientError as err:
             raise ResideoConnectionError(f"Connection error: {err}") from err
@@ -313,9 +339,16 @@ class ResideoApiClient:
         )
 
     async def test_connection(self) -> bool:
-        """Test the connection to the API."""
+        """Test the connection to the API.
+
+        Returns False for transient connection problems, but lets
+        ResideoAuthError propagate so setup can trigger reauth instead of
+        retrying forever with a dead token.
+        """
         try:
             await self.get_accounts()
             return True
+        except ResideoAuthError:
+            raise
         except ResideoApiError:
             return False

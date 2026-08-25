@@ -113,6 +113,9 @@ class ResideoOAuth2FlowHandler(
                     session = async_get_clientsession(self.hass)
                     client = ResideoApiClient(session, refresh_token)
                     accounts = await client.get_accounts()
+                    # Verifying spent the refresh token, so Resideo rotated it.
+                    # Store the current one rather than the value we came in with.
+                    refresh_token = client.refresh_token
                     data = accounts.get("data", {})
                     user_id = data.get("id", "unknown")
                     first_name = data.get("firstName", "")
@@ -180,6 +183,9 @@ class ResideoOAuth2FlowHandler(
                     # Verify the token works by getting account info
                     client = ResideoApiClient(session, refresh_token)
                     accounts = await client.get_accounts()
+                    # Verifying spent the refresh token, so Resideo rotated it.
+                    # Store the current one rather than the value we came in with.
+                    refresh_token = client.refresh_token
                     data = accounts.get("data", {})
                     user_id = data.get("id", "unknown")
                     first_name = data.get("firstName", "")
@@ -246,6 +252,9 @@ class ResideoOAuth2FlowHandler(
 
             try:
                 accounts = await client.get_accounts()
+                # Verifying spent the refresh token, so Resideo rotated it.
+                # Store the current one rather than the value we came in with.
+                refresh_token = client.refresh_token
                 data = accounts.get("data", {})
                 email = data.get("contactEmail", "unknown")
                 user_id = data.get("id", "unknown")
@@ -300,6 +309,8 @@ class ResideoOAuth2FlowHandler(
 
         try:
             accounts = await client.get_accounts()
+            # Verifying spent the refresh token, so Resideo rotated it.
+            refresh_token = client.refresh_token
             account_data = accounts.get("data", {})
             email = account_data.get("contactEmail", "unknown")
             user_id = account_data.get("id", "unknown")
@@ -447,6 +458,8 @@ class ResideoOAuth2FlowHandler(
 
             try:
                 await client.get_accounts()
+                # Verifying spent the refresh token, so Resideo rotated it.
+                refresh_token = client.refresh_token
 
                 return self.async_update_reload_and_abort(
                     self._get_reauth_entry(),
@@ -528,6 +541,8 @@ class ResideoOptionsFlowHandler(OptionsFlow):
 
             try:
                 await client.get_accounts()
+                # Verifying spent the refresh token, so Resideo rotated it.
+                refresh_token = client.refresh_token
 
                 # Update the config entry data with new token
                 new_data = {**self.config_entry.data, CONF_REFRESH_TOKEN: refresh_token}
