@@ -109,15 +109,19 @@ class ResideoApiClient:
         session: aiohttp.ClientSession,
         refresh_token: str,
         token_updater: Callable[[str], None] | None = None,
+        client_id: str = OAUTH_CLIENT_ID,
     ) -> None:
         """Initialize the API client.
 
         token_updater, if given, is called with the new refresh token whenever
         Resideo rotates it, so the caller can persist it for future sessions.
+        client_id is the OAuth client that issued the refresh token; refreshing
+        must reuse it, so web-client tokens pass the web client here.
         """
         self._session = session
         self._refresh_token = refresh_token
         self._token_updater = token_updater
+        self._client_id = client_id
         self._access_token: str | None = None
         self._token_expiry: datetime | None = None
         self._lock = asyncio.Lock()
@@ -148,7 +152,7 @@ class ResideoApiClient:
                 json={
                     "grant_type": "refresh_token",
                     "refresh_token": self._refresh_token,
-                    "client_id": OAUTH_CLIENT_ID,
+                    "client_id": self._client_id,
                 },
                 headers={"Content-Type": "application/json"},
             ) as response:

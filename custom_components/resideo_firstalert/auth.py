@@ -29,6 +29,12 @@ SCOPE = "openid profile email offline_access"
 TENANT = "resideo-prod"
 CONNECTION = "Username-Password-Authentication"
 
+# The web (SPA) client redirects to a real https page instead of an app scheme,
+# so the authorization code lands in the browser address bar and no developer
+# tools are needed to copy it.
+WEB_CLIENT_ID = "dN6PdXbUwMAYGRuh8vQX8BfIry6oge1E"
+WEB_REDIRECT_URI = "https://myid.resideo.com"
+
 # Auth0 client identifiers (base64 encoded JSON)
 AUTH0_CLIENT_BROWSER = "eyJuYW1lIjoiYXV0aDAuanMtdWxwIiwidmVyc2lvbiI6IjkuMTMuMiJ9"
 AUTH0_CLIENT_APP = "eyJ2ZXJzaW9uIjoiMS4xNC4wIiwibmFtZSI6ImF1dGgwLWZsdXR0ZXIiLCJlbnYiOnsiY29yZSI6IjIuMTAuMCIsImlPUyI6IjI2LjEiLCJzd2lmdCI6IjUueCJ9fQ"
@@ -52,21 +58,27 @@ def generate_pkce_pair() -> tuple[str, str, str]:
     return verifier, challenge, state
 
 
-def build_authorize_url(code_challenge: str, state: str) -> str:
+def build_authorize_url(
+    code_challenge: str,
+    state: str,
+    client_id: str = OAUTH_CLIENT_ID,
+    redirect_uri: str = REDIRECT_URI,
+) -> str:
     """Build the hosted-login authorize URL for the browser-assisted flow.
 
-    This is the same authorize request the First Alert mobile app makes, so the
-    authorization code it returns exchanges for tokens the API client already
-    knows how to refresh.
+    Defaults to the mobile app client and its custom-scheme redirect, so the
+    authorization code exchanges for tokens the API client already knows how to
+    refresh. Pass WEB_CLIENT_ID / WEB_REDIRECT_URI to use the web client, whose
+    redirect is a normal https page.
     """
     params = {
         "state": state,
         "scope": SCOPE,
-        "client_id": OAUTH_CLIENT_ID,
+        "client_id": client_id,
         "code_challenge_method": "S256",
         "response_type": "code",
         "audience": AUDIENCE,
-        "redirect_uri": REDIRECT_URI,
+        "redirect_uri": redirect_uri,
         "code_challenge": code_challenge,
         "prompt": "login",
     }
@@ -112,13 +124,21 @@ def parse_authorization_code(pasted: str, expected_state: str | None = None) -> 
 
 
 async def exchange_code_for_tokens(
-    session: aiohttp.ClientSession, code: str, code_verifier: str
+    session: aiohttp.ClientSession,
+    code: str,
+    code_verifier: str,
+    client_id: str = OAUTH_CLIENT_ID,
+    redirect_uri: str = REDIRECT_URI,
 ) -> dict:
-    """Exchange an authorization code for tokens (browser-assisted flow)."""
+    """Exchange an authorization code for tokens (browser-assisted flow).
+
+    client_id and redirect_uri must match the ones used to build the authorize
+    URL, otherwise Auth0 rejects the exchange.
+    """
     token_data = {
-        "client_id": OAUTH_CLIENT_ID,
+        "client_id": client_id,
         "code": code,
-        "redirect_uri": REDIRECT_URI,
+        "redirect_uri": redirect_uri,
         "code_verifier": code_verifier,
         "grant_type": "authorization_code",
     }
