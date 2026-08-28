@@ -8,7 +8,7 @@ import logging
 import re
 import secrets
 from base64 import urlsafe_b64encode
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlencode, urlparse
 
 import aiohttp
 
@@ -29,6 +29,12 @@ SCOPE = "openid profile email offline_access"
 TENANT = "resideo-prod"
 CONNECTION = "Username-Password-Authentication"
 
+# The web (SPA) client redirects to a real https page instead of an app scheme,
+# so the authorization code lands in the browser address bar and no developer
+# tools are needed to copy it.
+WEB_CLIENT_ID = "dN6PdXbUwMAYGRuh8vQX8BfIry6oge1E"
+WEB_REDIRECT_URI = "https://myid.resideo.com"
+
 # Auth0 client identifiers (base64 encoded JSON)
 AUTH0_CLIENT_BROWSER = "eyJuYW1lIjoiYXV0aDAuanMtdWxwIiwidmVyc2lvbiI6IjkuMTMuMiJ9"
 AUTH0_CLIENT_APP = "eyJ2ZXJzaW9uIjoiMS4xNC4wIiwibmFtZSI6ImF1dGgwLWZsdXR0ZXIiLCJlbnYiOnsiY29yZSI6IjIuMTAuMCIsImlPUyI6IjI2LjEiLCJzd2lmdCI6IjUueCJ9fQ"
@@ -36,6 +42,120 @@ AUTH0_CLIENT_APP = "eyJ2ZXJzaW9uIjoiMS4xNC4wIiwibmFtZSI6ImF1dGgwLWZsdXR0ZXIiLCJl
 
 class AuthenticationError(Exception):
     """Authentication error."""
+
+
+def generate_pkce_pair() -> tuple[str, str, str]:
+    """Generate a PKCE code_verifier, code_challenge and state.
+
+    Returns a tuple of (code_verifier, code_challenge, state). The verifier and
+    state must be preserved between building the authorize URL and exchanging the
+    returned authorization code, so callers keep them in flow state.
+    """
+    verifier = urlsafe_b64encode(secrets.token_bytes(32)).decode("utf-8").rstrip("=")
+    challenge_bytes = hashlib.sha256(verifier.encode("ascii")).digest()
+    challenge = urlsafe_b64encode(challenge_bytes).decode("utf-8").rstrip("=")
+    state = urlsafe_b64encode(secrets.token_bytes(32)).decode("utf-8").rstrip("=")
+    return verifier, challenge, state
+
+
+def build_authorize_url(
+    code_challenge: str,
+    state: str,
+    client_id: str = OAUTH_CLIENT_ID,
+    redirect_uri: str = REDIRECT_URI,
+) -> str:
+    """Build the hosted-login authorize URL for the browser-assisted flow.
+
+    Defaults to the mobile app client and its custom-scheme redirect, so the
+    authorization code exchanges for tokens the API client already knows how to
+    refresh. Pass WEB_CLIENT_ID / WEB_REDIRECT_URI to use the web client, whose
+    redirect is a normal https page.
+    """
+    params = {
+        "state": state,
+        "scope": SCOPE,
+        "client_id": client_id,
+        "code_challenge_method": "S256",
+        "response_type": "code",
+        "audience": AUDIENCE,
+        "redirect_uri": redirect_uri,
+        "code_challenge": code_challenge,
+        "prompt": "login",
+    }
+    return f"{AUTH0_AUTHORIZE_URL}?{urlencode(params)}"
+
+
+def parse_authorization_code(pasted: str, expected_state: str | None = None) -> str:
+    """Extract the authorization code from a pasted callback URL or bare code.
+
+    Accepts either the full ``com.resideo.firstalert://...?code=...`` callback URL
+    the browser is redirected to, or just the ``code`` value copied on its own.
+    Raises AuthenticationError if no code is found, the callback carries an OAuth
+    error, or the returned state does not match.
+    """
+    value = pasted.strip()
+    if not value:
+        raise AuthenticationError("No authorization code provided")
+
+    lower = value.lower()
+    looks_like_url = "://" in lower or lower.startswith(("com.resideo", "http"))
+    # A pasted callback carries query parameters; a bare code has none. Accept the
+    # full URL, a bare "code=...&state=..." fragment, or just the code on its own.
+    has_query = "?" in value or "code=" in lower or "error=" in lower
+
+    if looks_like_url or has_query:
+        query_str = urlparse(value).query if "?" in value else value
+        query = parse_qs(query_str)
+        error = query.get("error", [None])[0]
+        if error:
+            desc = query.get("error_description", ["Unknown error"])[0]
+            raise AuthenticationError(f"Authorization failed: {error} - {desc}")
+        code = query.get("code", [None])[0]
+        returned_state = query.get("state", [None])[0]
+        if expected_state and returned_state and returned_state != expected_state:
+            raise AuthenticationError("State mismatch - please restart the login")
+    else:
+        code = value
+
+    if not code:
+        raise AuthenticationError("Could not find an authorization code in the pasted value")
+
+    return code
+
+
+async def exchange_code_for_tokens(
+    session: aiohttp.ClientSession,
+    code: str,
+    code_verifier: str,
+    client_id: str = OAUTH_CLIENT_ID,
+    redirect_uri: str = REDIRECT_URI,
+) -> dict:
+    """Exchange an authorization code for tokens (browser-assisted flow).
+
+    client_id and redirect_uri must match the ones used to build the authorize
+    URL, otherwise Auth0 rejects the exchange.
+    """
+    token_data = {
+        "client_id": client_id,
+        "code": code,
+        "redirect_uri": redirect_uri,
+        "code_verifier": code_verifier,
+        "grant_type": "authorization_code",
+    }
+    headers = {
+        "Auth0-Client": AUTH0_CLIENT_APP,
+        "Content-Type": "application/json",
+    }
+    async with session.post(OAUTH_TOKEN_URL, json=token_data, headers=headers) as resp:
+        if resp.status != 200:
+            text = await resp.text()
+            if "invalid_grant" in text:
+                raise AuthenticationError(
+                    "The authorization code was rejected. It may have expired or "
+                    "already been used - please restart the login and paste a fresh code."
+                )
+            raise AuthenticationError(f"Token exchange failed: {resp.status} - {text}")
+        return await resp.json()
 
 
 class ResideoAuth:

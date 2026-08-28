@@ -26,6 +26,9 @@ CONF_REFRESH_TOKEN = "refresh_token"
 CONF_SCAN_INTERVAL = "scan_interval"
 CONF_ACCESS_TOKEN = "access_token"
 CONF_TOKEN_EXPIRY = "token_expiry"
+# Which OAuth client issued the stored refresh token. Absent means the mobile
+# app client (OAUTH_CLIENT_ID); token refresh must reuse the issuing client.
+CONF_CLIENT_ID = "client_id"
 
 # Device types
 DEVICE_TYPE_SMOKE_DETECTOR = "SmokeDetector"
