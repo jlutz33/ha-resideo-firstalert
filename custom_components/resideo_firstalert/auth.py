@@ -36,8 +36,9 @@ WEB_CLIENT_ID = "dN6PdXbUwMAYGRuh8vQX8BfIry6oge1E"
 WEB_REDIRECT_URI = "https://myid.resideo.com"
 
 # Auth0 client identifiers (base64 encoded JSON)
-AUTH0_CLIENT_BROWSER = "eyJuYW1lIjoiYXV0aDAuanMtdWxwIiwidmVyc2lvbiI6IjkuMTMuMiJ9"
-AUTH0_CLIENT_APP = "eyJ2ZXJzaW9uIjoiMS4xNC4wIiwibmFtZSI6ImF1dGgwLWZsdXR0ZXIiLCJlbnYiOnsiY29yZSI6IjIuMTAuMCIsImlPUyI6IjI2LjEiLCJzd2lmdCI6IjUueCJ9fQ"
+AUTH0_CLIENT_BROWSER = "eyJuYW1lIjoiYXV0aDAuanMtdWxwIiwidmVyc2lvbiI6IjkuMzIuMCJ9"
+AUTH0_CLIENT_APP = "eyJ2ZXJzaW9uIjoiMi4zLjAiLCJlbnYiOnsiY29yZSI6IjIuMjEuMiIsInN3aWZ0IjoiNi54IiwiaU9TIjoiMjYuNSJ9LCJuYW1lIjoiYXV0aDAtZmx1dHRlciJ9"
+AUTH0_CLIENT_JS = "eyJuYW1lIjoiYXV0aDAuanMiLCJ2ZXJzaW9uIjoiOS4zMi4wIn0="
 
 
 class AuthenticationError(Exception):
@@ -167,6 +168,7 @@ class ResideoAuth:
         self._code_verifier: str | None = None
         self._code_challenge: str | None = None
         self._state: str | None = None
+        self._nonce: str | None = None
 
     def _generate_pkce(self) -> None:
         """Generate PKCE code_verifier and code_challenge."""
@@ -181,6 +183,10 @@ class ResideoAuth:
         # Generate random state
         state_bytes = secrets.token_bytes(32)
         self._state = urlsafe_b64encode(state_bytes).decode("utf-8").rstrip("=")
+
+        # Generate random nonce (required by the /usernamepassword/login step)
+        nonce_bytes = secrets.token_bytes(32)
+        self._nonce = urlsafe_b64encode(nonce_bytes).decode("utf-8").rstrip("=")
 
     async def authenticate(self, email: str, password: str) -> dict:
         """Authenticate with email and password, return tokens."""
@@ -197,6 +203,10 @@ class ResideoAuth:
             # Step 2: Get login page and CSRF token
             _LOGGER.debug("Step 2: Getting login page")
             csrf_token = await self._step2_get_login_page(session, auth0_state)
+
+            # Step 2b: Check whether Auth0 requires a bot-detection challenge
+            _LOGGER.debug("Step 2b: Checking challenge requirement")
+            await self._step2b_check_challenge(session, auth0_state)
 
             # Step 3: Submit credentials
             _LOGGER.debug("Step 3: Submitting credentials")
@@ -227,11 +237,10 @@ class ResideoAuth:
             "client_id": OAUTH_CLIENT_ID,
             "code_challenge_method": "S256",
             "response_type": "code",
-            "max_age": "0",
             "audience": AUDIENCE,
             "redirect_uri": REDIRECT_URI,
+            "nonce": self._nonce,
             "code_challenge": self._code_challenge,
-            "prompt": "login",
             "auth0Client": AUTH0_CLIENT_APP,
         }
 
@@ -292,6 +301,33 @@ class ResideoAuth:
 
             return csrf_token
 
+    async def _step2b_check_challenge(
+        self, session: aiohttp.ClientSession, auth0_state: str
+    ) -> None:
+        """Check whether Auth0 requires a bot-detection challenge for this login."""
+        headers = {
+            "Auth0-Client": AUTH0_CLIENT_JS,
+            "Origin": AUTH0_BASE_URL,
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)",
+        }
+
+        async with session.post(
+            f"{AUTH0_BASE_URL}/usernamepassword/challenge",
+            json={"state": auth0_state},
+            headers=headers,
+        ) as resp:
+            if resp.status != 200:
+                # Non-fatal: fall through and let the login step surface any real error
+                return
+
+            data = await resp.json()
+            if data.get("required"):
+                raise AuthenticationError(
+                    "Auth0 requires a security challenge (e.g. CAPTCHA) that automated "
+                    "login cannot complete. Use the browser sign-in option instead."
+                )
+
     async def _step3_submit_credentials(
         self,
         session: aiohttp.ClientSession,
@@ -311,6 +347,7 @@ class ResideoAuth:
             "_csrf": csrf_token,
             "state": auth0_state,
             "_intstate": "deprecated",
+            "nonce": self._nonce,
             "username": email,
             "password": password,
             "connection": CONNECTION,
@@ -334,6 +371,12 @@ class ResideoAuth:
                 # Check for specific error messages
                 if "Wrong email or password" in text or "invalid_grant" in text:
                     raise AuthenticationError("Invalid email or password")
+                _LOGGER.debug(
+                    "Step 3 failed: status=%s headers=%s body=%s",
+                    resp.status,
+                    dict(resp.headers),
+                    text[:2000],
+                )
                 raise AuthenticationError(f"Login failed with status {resp.status}")
 
             # Extract wresult from HTML form
