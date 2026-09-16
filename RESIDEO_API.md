@@ -326,6 +326,49 @@ than an extension of this one.
 
 ---
 
+## The wider Resideo API surface
+
+This integration only uses `ris-public-api`, but the mobile app talks to more
+than that. Knowing the rest is useful when diagnosing an outage, because it
+tells you whether a problem is specific to us or Resideo wide.
+
+| Surface | Base | Used for |
+|---------|------|----------|
+| Auth | `login.resideo.com` | Auth0 login and token refresh |
+| REST | `api.resideo.com/ris-public-api` | Account listing and smoke detector state, what this integration uses |
+| REST | `api.resideo.com/devsrv` | Device state and commands, needs an Azure APIM subscription key header |
+| Push | `ds-notification-service.prod.titans.cloud` | Azure SignalR real time events |
+
+The `devsrv` service and the SignalR channel were mapped by the
+[sfcodes/ha-resideo](https://github.com/sfcodes/ha-resideo) project, which
+documents the APIM key and the SignalR handshake in detail.
+
+### Telling an outage apart from a retirement
+
+The gateway answers differently depending on whether a route exists, which makes
+diagnosis easy without any credentials.
+
+- `{"statusCode":404,"message":"Resource not found"}` means the **path is not
+  registered**. Made up paths and retired routes look like this.
+- `{"statusCode":503,"message":"The API is temporarily down for planned
+  maintenance..."}` means the **route exists** but its backend is flagged down.
+
+So a 503 on a route you know is real indicates a live outage, not a removal. A
+retired endpoint would 404.
+
+Two more things worth knowing during an outage.
+
+- The push channel and the REST services fail independently. On 2026-09-09 both
+  REST services returned 503 for over ten hours while SignalR stayed up, so the
+  mobile app still showed live alarm events from its push feed on top of a
+  cached device list. An app that looks healthy does **not** mean the REST API
+  is healthy.
+- The 503 is identical for every client. It does not vary by user agent, by
+  whether a bearer token is sent, or by which of the two REST services is
+  called, so it is not the integration being singled out.
+
+---
+
 ## Home Assistant Integration Notes
 
 ### Sensors to Expose
