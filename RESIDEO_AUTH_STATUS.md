@@ -18,7 +18,7 @@ Two extra headers are mandatory on every call at the new host (confirmed via sfc
 
 **Not yet done, deliberately out of scope for now**: `sfcodes`'s client also documents a working Azure SignalR real-time push channel (separate from this REST fix) that also moved hosts alongside the REST API — noted here in case push-based updates are worth adding later, but the REST fix alone should be sufficient to restore normal polling.
 
-**Verification gap**: everything above is confirmed via unauthenticated probes (proves the endpoints are alive and enforcing auth correctly) — nobody has yet completed a real authenticated call against `api.ha.resideo.com` with this integration's exact code path. That needs a real login (browser-assisted flow) end to end.
+**Confirmed end-to-end**: shipped as `v1.5.0` on this fork, installed via HACS on a real instance with an existing config entry, restarted — sensors resumed updating with no re-login needed (the stored refresh token was still valid the whole time, since only the REST data host moved, not Auth0). The fix works in practice, not just in probes.
 
 ## 2026-09-16 update: Resideo's backend itself is down, and the login flow got a real upgrade
 
