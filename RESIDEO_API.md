@@ -335,26 +335,37 @@ tells you whether a problem is specific to us or Resideo wide.
 | Surface | Base | Used for |
 |---------|------|----------|
 | Auth | `login.resideo.com` | Auth0 login and token refresh |
-| REST | `api.resideo.com/ris-public-api` | Account listing and smoke detector state, what this integration uses |
-| REST | `api.resideo.com/devsrv` | Device state and commands, needs an Azure APIM subscription key header |
-| Push | `ds-notification-service.prod.titans.cloud` | Azure SignalR real time events |
+| REST | `api.ha.resideo.com/ris-public-api` | Account listing and smoke detector state, what this integration uses |
+| REST | `api.ha.resideo.com` (`devsrv`'s old routes) | Device state and commands, needs an Azure APIM subscription key header |
+| Push | `api.ha.resideo.com/ds-notification-service` | Azure SignalR real time events |
 
-The `devsrv` service and the SignalR channel were mapped by the
+`api.resideo.com` — the host all three REST/push rows above used to live under
+— was retired around Sept 2026; see "Moved in Sept 2026" above. The `devsrv`
+service and the SignalR channel were mapped by the
 [sfcodes/ha-resideo](https://github.com/sfcodes/ha-resideo) project, which
-documents the APIM key and the SignalR handshake in detail.
+documents the APIM key and the SignalR handshake in detail, including that
+`devsrv`'s routes were split across the new host's `ris-public-api` v1/v2
+paths rather than kept as a separate standalone service.
 
 ### Telling an outage apart from a retirement
 
-The gateway answers differently depending on whether a route exists, which makes
-diagnosis easy without any credentials.
+The gateway answers differently depending on whether a route exists, which
+usually makes diagnosis easy without any credentials — **with one important
+exception, learned the hard way during the Sept 2026 host move below.**
 
 - `{"statusCode":404,"message":"Resource not found"}` means the **path is not
-  registered**. Made up paths and retired routes look like this.
+  registered**. Made up paths look like this.
 - `{"statusCode":503,"message":"The API is temporarily down for planned
-  maintenance..."}` means the **route exists** but its backend is flagged down.
+  maintenance..."}` normally means the **route exists** but its backend is
+  flagged down temporarily.
 
-So a 503 on a route you know is real indicates a live outage, not a removal. A
-retired endpoint would 404.
+That second rule turned out not to be reliable. Starting 2026-09-09,
+`api.resideo.com` returned that exact 503 on every call, indefinitely, for
+every client, with no real maintenance window behind it — the host had been
+retired, not temporarily downed, but the gateway kept answering as if it were
+a transient outage rather than 404ing or reporting the move. **A persistent
+503 that doesn't clear after a reasonable window is worth checking for a
+retired/moved host, not just waiting out.**
 
 Two more things worth knowing during an outage.
 
