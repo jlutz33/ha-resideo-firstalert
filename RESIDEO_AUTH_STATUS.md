@@ -1,6 +1,24 @@
 # Resideo Auth Investigation — Status
 
-Last updated 2026-09-16. Earlier updates are preserved below, most recent first.
+Last updated 2026-09-16 (second update same day). Earlier updates are preserved below, most recent first.
+
+## 2026-09-16 update #2: the "outage" was actually a host migration — fixed
+
+Same-day follow-up to the update directly below, which had concluded the REST outage was purely Resideo's problem with nothing for us to do. That conclusion was wrong, or at least incomplete: **`api.resideo.com` isn't down, it's retired.** Resideo migrated the entire consumer API to a new host, `api.ha.resideo.com`, and the old host's canned 503 "planned maintenance" body is permanent, not transient.
+
+Found via `sfcodes/ha-resideo` (a separate, more mature reverse-engineering project covering Resideo's thermostat/leak-detector devices via this same consumer API), whose [v0.3.0 release](https://github.com/sfcodes/ha-resideo/releases/tag/v0.3.0) diagnosed and fixed the identical 503 on 2026-09-11. Their `const.py`/`client.py` are extensively documented, reverse-engineered-and-verified-live reference material — not speculation. Independently confirmed ourselves (not just trusted their word) via direct `curl`:
+
+- `https://api.ha.resideo.com/ris-public-api/api/v1/accounts` → `401` (not 503/404 — route exists, live, enforcing auth)
+- `https://api.ha.resideo.com/ris-public-api/api/v2/devices/smokeDetectors/{id}/state` → `401` — our exact smoke-detector endpoint, specifically, also confirmed alive at the new host (sfcodes' project only covers thermostats, so this needed separate verification)
+- Old host (`api.resideo.com`) still `503` on the same accounts call, same moment — direct side-by-side confirmation this is a host move, not a flaky endpoint recovering/failing intermittently
+
+Two extra headers are mandatory on every call at the new host (confirmed via sfcodes' `client.py`, which sends both unconditionally on every request, not just writes): `Ocp-Apim-Subscription-Key: b60885e8a9b44680a29ea1f03452878a` (Azure API Management key) and `User-Agent: First Alert/2440 CFNetwork/3860.600.12 Darwin/25.5.0` (the real app's UA — our client previously sent no UA on API calls at all, only on the Auth0 login flow in `auth.py`).
+
+**Fixed in this fork**: `const.py`'s `API_BASE_URL` now points at the new host, `API_SUBSCRIPTION_KEY`/`API_USER_AGENT` added, and `api.py::_request` now sends both new headers on every call (persists through the existing 401-retry path automatically, since that path mutates the same headers dict rather than rebuilding it). `RESIDEO_API.md` updated to match. Auth0 (`login.resideo.com`) is untouched by any of this — it was never part of the outage, only the REST data layer moved.
+
+**Not yet done, deliberately out of scope for now**: `sfcodes`'s client also documents a working Azure SignalR real-time push channel (separate from this REST fix) that also moved hosts alongside the REST API — noted here in case push-based updates are worth adding later, but the REST fix alone should be sufficient to restore normal polling.
+
+**Verification gap**: everything above is confirmed via unauthenticated probes (proves the endpoints are alive and enforcing auth correctly) — nobody has yet completed a real authenticated call against `api.ha.resideo.com` with this integration's exact code path. That needs a real login (browser-assisted flow) end to end.
 
 ## 2026-09-16 update: Resideo's backend itself is down, and the login flow got a real upgrade
 

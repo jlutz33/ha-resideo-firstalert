@@ -45,13 +45,23 @@ Content-Type: application/json
 
 ## API Endpoints
 
-Base URL: `https://api.resideo.com`
+Base URL: `https://api.ha.resideo.com`
+
+> **Moved in Sept 2026.** The old base URL, `https://api.resideo.com`, is retired, not down —
+> it now answers every call with a canned `{"statusCode":503,"message":"The API is
+> temporarily down for planned maintenance."}`, indefinitely, regardless of Resideo's own
+> status page (which shows no incident). Paths are unchanged at the new host; two extra
+> headers are required on every call (see below). Confirmed live 2026-09-16. Credit:
+> [sfcodes/ha-resideo v0.3.0](https://github.com/sfcodes/ha-resideo/releases/tag/v0.3.0),
+> which mapped the same host move for Resideo's thermostat/leak-detector API surface.
 
 All requests require:
 ```http
 Authorization: Bearer <access_token>
 Content-Type: application/json
 Accept: application/json
+Ocp-Apim-Subscription-Key: b60885e8a9b44680a29ea1f03452878a
+User-Agent: First Alert/2440 CFNetwork/3860.600.12 Darwin/25.5.0
 ```
 
 ### Get Account Information
@@ -386,14 +396,14 @@ class ResideoClient:
 
     def get_accounts(self):
         resp = requests.get(
-            "https://api.resideo.com/ris-public-api/api/v1/accounts",
+            "https://api.ha.resideo.com/ris-public-api/api/v1/accounts",
             headers=self._headers()
         )
         return resp.json()
 
     def get_device_state(self, device_id: str):
         resp = requests.get(
-            f"https://api.resideo.com/ris-public-api/api/v2/devices/smokeDetectors/{device_id}/state",
+            f"https://api.ha.resideo.com/ris-public-api/api/v2/devices/smokeDetectors/{device_id}/state",
             headers=self._headers()
         )
         return resp.json()

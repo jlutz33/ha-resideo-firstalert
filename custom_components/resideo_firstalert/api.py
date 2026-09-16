@@ -15,6 +15,8 @@ from .const import (
     API_ACCOUNTS_ENDPOINT,
     API_BASE_URL,
     API_DEVICE_STATE_ENDPOINT,
+    API_SUBSCRIPTION_KEY,
+    API_USER_AGENT,
     DEVICE_TYPE_SMOKE_DETECTOR,
     OAUTH_CLIENT_ID,
     OAUTH_TOKEN_URL,
@@ -210,6 +212,9 @@ class ResideoApiClient:
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
             "Accept": "application/json",
+            # Both required on every api.ha.resideo.com call, not just writes - see const.py.
+            "Ocp-Apim-Subscription-Key": API_SUBSCRIPTION_KEY,
+            "User-Agent": API_USER_AGENT,
         }
 
         url = f"{API_BASE_URL}{endpoint}"
