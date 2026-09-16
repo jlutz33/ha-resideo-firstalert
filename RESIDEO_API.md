@@ -279,9 +279,40 @@ POST /ds-activity-feed-api/api/v1/app/events
 
 ## Device Types
 
-| `globalDeviceType` | Description |
-|-------------------|-------------|
-| `Citadel_SC5` | First Alert Safe & Sound Smart Smoke/CO Alarm (SMCO600NVACA) |
+| `globalDeviceType` | `productFamily` | `productPlatform` | Description |
+|-------------------|-----------------|-------------------|-------------|
+| `Citadel_SC5` | `SmokeDetector` | `Citadel` | First Alert Safe & Sound Smart Smoke/CO Alarm (SMCO600NVACA) |
+| `LeakDetector_L1_R` | `LeakDetector` | `WLD3_RETAIL` | Water leak detector. Listed on the account but **not supported by this API**, see below |
+
+### Devices without a state endpoint
+
+An account can contain devices this API does not serve. Water leak detectors
+appear in the `/accounts` response with full product metadata, but there is no
+state endpoint for them on `ris-public-api`. Requesting their state from the
+smoke detector endpoint returns:
+
+```json
+[{"ErrorCode":"DeviceNotInScaleUnit","Message":"DeviceId: ..."}]
+```
+
+Note the difference between the two 404 bodies, it is a useful signal:
+
+- `{"statusCode":404,"message":"Resource not found"}` means the **path** does not
+  exist. Every non smoke device collection tried (`leakDetectors`,
+  `waterLeakDetectors`, `thermostats`, `waterValves`, and others, across `v1`,
+  `v2` and `v3` and several service prefixes) returns this.
+- `DeviceNotInScaleUnit` means the **path exists** but the device is served by a
+  different backend.
+
+Because of this, the integration filters devices by `productFamily` when reading
+the account, so unsupported devices are never queried and never appear as smoke
+detectors.
+
+Leak detectors and thermostats are served by Resideo's separate Honeywell Home
+developer API (`api.honeywellhome.com`), which has live `waterLeakDetectors`,
+`thermostats` and `shutoffvalve` endpoints. That API uses its own OAuth
+registration, so supporting those devices means a separate integration rather
+than an extension of this one.
 
 ---
 

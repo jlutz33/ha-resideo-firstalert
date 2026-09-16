@@ -52,9 +52,8 @@ When adding the integration, you have three options.
 3. Select **"Sign in with your browser"**
 4. Click the sign-in link shown in the dialog. It opens the Resideo login page in a new tab.
 5. Sign in with your Resideo account (the same credentials you use in the First Alert app).
-6. After signing in, the page tries to open the First Alert app and appears to stall or fail. **This is expected.**
-7. Copy the authorization code and paste it back into Home Assistant. You can paste either the full `com.resideo.firstalert://...` address the page tried to open, or just the `code` value from it.
-   - If your browser does not show that address, open developer tools (**F12**) → **Network** tab *before* signing in, then find the request whose location starts with `com.resideo.firstalert://` and copy its `code` parameter.
+6. After signing in, the browser lands on a page that just says **"Not found."** This is expected. The part you need is in the browser's address bar.
+7. Copy the whole address from the address bar (it contains `?code=...`) and paste it back into Home Assistant. You can also paste just the `code` value if you prefer.
 8. Your devices will be automatically discovered.
 
 The authorization code is single-use and expires quickly, so paste it promptly after signing in.

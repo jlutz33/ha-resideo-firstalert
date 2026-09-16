@@ -24,16 +24,16 @@ AUTH0_CALLBACK_URL = f"{AUTH0_BASE_URL}/login/callback"
 
 # OAuth configuration
 REDIRECT_URI = "com.resideo.firstalert://login.resideo.com/ios/com.resideo.firstalert/callback"
+# The browser-assisted flow uses the app's https callback instead of the custom
+# app scheme. Both are registered for the same client, but the https one lands on
+# a static "Not found." page on login.resideo.com, so the authorization code
+# stays visible in the browser address bar and can be copied without developer
+# tools. The custom scheme never renders a page the user can read the code from.
+BROWSER_REDIRECT_URI = "https://login.resideo.com/ios/com.resideo.firstalert/callback"
 AUDIENCE = "https://resideo-prod.auth0.com/api/v2/"
 SCOPE = "openid profile email offline_access"
 TENANT = "resideo-prod"
 CONNECTION = "Username-Password-Authentication"
-
-# The web (SPA) client redirects to a real https page instead of an app scheme,
-# so the authorization code lands in the browser address bar and no developer
-# tools are needed to copy it.
-WEB_CLIENT_ID = "dN6PdXbUwMAYGRuh8vQX8BfIry6oge1E"
-WEB_REDIRECT_URI = "https://myid.resideo.com"
 
 # Auth0 client identifiers (base64 encoded JSON)
 AUTH0_CLIENT_BROWSER = "eyJuYW1lIjoiYXV0aDAuanMtdWxwIiwidmVyc2lvbiI6IjkuMzIuMCJ9"
@@ -59,27 +59,21 @@ def generate_pkce_pair() -> tuple[str, str, str]:
     return verifier, challenge, state
 
 
-def build_authorize_url(
-    code_challenge: str,
-    state: str,
-    client_id: str = OAUTH_CLIENT_ID,
-    redirect_uri: str = REDIRECT_URI,
-) -> str:
+def build_authorize_url(code_challenge: str, state: str) -> str:
     """Build the hosted-login authorize URL for the browser-assisted flow.
 
-    Defaults to the mobile app client and its custom-scheme redirect, so the
-    authorization code exchanges for tokens the API client already knows how to
-    refresh. Pass WEB_CLIENT_ID / WEB_REDIRECT_URI to use the web client, whose
-    redirect is a normal https page.
+    Uses the same app client as the First Alert mobile app, so the code exchanges
+    for tokens the API client already knows how to refresh, but with the https
+    callback so the code lands in the address bar.
     """
     params = {
         "state": state,
         "scope": SCOPE,
-        "client_id": client_id,
+        "client_id": OAUTH_CLIENT_ID,
         "code_challenge_method": "S256",
         "response_type": "code",
         "audience": AUDIENCE,
-        "redirect_uri": redirect_uri,
+        "redirect_uri": BROWSER_REDIRECT_URI,
         "code_challenge": code_challenge,
         "prompt": "login",
     }
@@ -125,21 +119,13 @@ def parse_authorization_code(pasted: str, expected_state: str | None = None) -> 
 
 
 async def exchange_code_for_tokens(
-    session: aiohttp.ClientSession,
-    code: str,
-    code_verifier: str,
-    client_id: str = OAUTH_CLIENT_ID,
-    redirect_uri: str = REDIRECT_URI,
+    session: aiohttp.ClientSession, code: str, code_verifier: str
 ) -> dict:
-    """Exchange an authorization code for tokens (browser-assisted flow).
-
-    client_id and redirect_uri must match the ones used to build the authorize
-    URL, otherwise Auth0 rejects the exchange.
-    """
+    """Exchange an authorization code for tokens (browser-assisted flow)."""
     token_data = {
-        "client_id": client_id,
+        "client_id": OAUTH_CLIENT_ID,
         "code": code,
-        "redirect_uri": redirect_uri,
+        "redirect_uri": BROWSER_REDIRECT_URI,
         "code_verifier": code_verifier,
         "grant_type": "authorization_code",
     }

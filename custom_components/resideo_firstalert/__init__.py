@@ -12,9 +12,8 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import OAUTH_CLIENT_ID, ResideoApiClient, ResideoAuthError, ResideoConnectionError
+from .api import ResideoApiClient, ResideoAuthError, ResideoConnectionError
 from .const import (
-    CONF_CLIENT_ID,
     CONF_REFRESH_TOKEN,
     CONF_SCAN_INTERVAL,
     DEFAULT_SCAN_INTERVAL,
@@ -36,7 +35,6 @@ PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.SENSOR]
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up First Alert by Resideo from a config entry."""
     refresh_token = entry.data[CONF_REFRESH_TOKEN]
-    client_id = entry.data.get(CONF_CLIENT_ID, OAUTH_CLIENT_ID)
     scan_interval = entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
 
     @callback
@@ -52,7 +50,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         session,
         refresh_token,
         token_updater=_persist_refresh_token,
-        client_id=client_id,
     )
 
     # Test the connection

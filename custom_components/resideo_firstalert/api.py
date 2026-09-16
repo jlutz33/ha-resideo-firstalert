@@ -15,8 +15,10 @@ from .const import (
     API_ACCOUNTS_ENDPOINT,
     API_BASE_URL,
     API_DEVICE_STATE_ENDPOINT,
+    DEVICE_TYPE_SMOKE_DETECTOR,
     OAUTH_CLIENT_ID,
     OAUTH_TOKEN_URL,
+    PRODUCT_FAMILY_SMOKE_DETECTOR,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -101,6 +103,14 @@ class ResideoConnectionError(ResideoApiError):
     """Connection error."""
 
 
+class ResideoServiceUnavailableError(ResideoConnectionError):
+    """Resideo's API is up but refusing requests, typically for maintenance.
+
+    Subclasses ResideoConnectionError so existing handlers keep treating it as a
+    transient problem worth retrying rather than a configuration failure.
+    """
+
+
 class ResideoApiClient:
     """Client for the Resideo API."""
 
@@ -109,19 +119,15 @@ class ResideoApiClient:
         session: aiohttp.ClientSession,
         refresh_token: str,
         token_updater: Callable[[str], None] | None = None,
-        client_id: str = OAUTH_CLIENT_ID,
     ) -> None:
         """Initialize the API client.
 
         token_updater, if given, is called with the new refresh token whenever
         Resideo rotates it, so the caller can persist it for future sessions.
-        client_id is the OAuth client that issued the refresh token; refreshing
-        must reuse it, so web-client tokens pass the web client here.
         """
         self._session = session
         self._refresh_token = refresh_token
         self._token_updater = token_updater
-        self._client_id = client_id
         self._access_token: str | None = None
         self._token_expiry: datetime | None = None
         self._lock = asyncio.Lock()
@@ -152,7 +158,7 @@ class ResideoApiClient:
                 json={
                     "grant_type": "refresh_token",
                     "refresh_token": self._refresh_token,
-                    "client_id": self._client_id,
+                    "client_id": OAUTH_CLIENT_ID,
                 },
                 headers={"Content-Type": "application/json"},
             ) as response:
@@ -160,6 +166,11 @@ class ResideoApiClient:
                 # (expired, revoked, or rotated away), which must trigger reauth.
                 if response.status in (401, 403):
                     raise ResideoAuthError("Invalid refresh token")
+                if response.status >= 500:
+                    raise ResideoServiceUnavailableError(
+                        "The Resideo token service is temporarily unavailable "
+                        f"({response.status})"
+                    )
                 if response.status != 200:
                     raise ResideoApiError(
                         f"Token refresh failed with status {response.status}"
@@ -220,6 +231,21 @@ class ResideoApiClient:
                         retry_response.raise_for_status()
                         return await retry_response.json()
 
+                # 5xx means Resideo's side is unhealthy, not that anything is
+                # wrong with the token or the configuration. 503 in particular is
+                # returned during their planned maintenance windows.
+                if response.status >= 500:
+                    text = await response.text()
+                    if response.status == 503:
+                        raise ResideoServiceUnavailableError(
+                            "The Resideo API is temporarily unavailable "
+                            f"(503). Response: {text[:200]}"
+                        )
+                    raise ResideoServiceUnavailableError(
+                        f"The Resideo API returned a server error "
+                        f"({response.status}). Response: {text[:200]}"
+                    )
+
                 if response.status != 200:
                     text = await response.text()
                     raise ResideoApiError(
@@ -252,11 +278,27 @@ class ResideoApiClient:
                 location_name = location.get("name", "Unknown")
                 for consumer_device in location.get("consumerDevices", []):
                     device = consumer_device.get("device", {})
+                    product = device.get("product", {})
+                    product_family = product.get("productFamily")
+
+                    # An account can also hold other Resideo devices, such as
+                    # water leak detectors. They are listed here but have no
+                    # state endpoint on this API, so asking for their state just
+                    # returns 404 on every poll. Skip them up front.
+                    if product_family and product_family != PRODUCT_FAMILY_SMOKE_DETECTOR:
+                        _LOGGER.debug(
+                            "Ignoring unsupported %s device (%s)",
+                            product_family,
+                            device.get("globalDeviceType"),
+                        )
+                        continue
+
                     devices.append({
                         "device_id": device.get("deviceId"),
                         "name": consumer_device.get("name", device.get("deviceId")),
                         "location": location_name,
                         "device_type": device.get("globalDeviceType"),
+                        "product_family": product_family,
                         "consumer_device_id": consumer_device.get("id"),
                     })
 
@@ -274,11 +316,27 @@ class ResideoApiClient:
 
             try:
                 state_data = await self.get_device_state(device_id)
-                states[device_id] = self._parse_device_state(state_data, device)
             except ResideoApiError as err:
                 _LOGGER.warning(
                     "Failed to get state for device %s: %s", device_id, err
                 )
+                continue
+
+            # This integration only models smoke/CO detectors. An account may
+            # also hold other Resideo devices (water valves, thermostats); if
+            # the API reports a device as a different type, skip it rather than
+            # present it as a smoke detector. A missing type is treated as a
+            # smoke detector so genuine detectors are never dropped.
+            reported_type = state_data.get("deviceType")
+            if reported_type and reported_type != DEVICE_TYPE_SMOKE_DETECTOR:
+                _LOGGER.debug(
+                    "Skipping unsupported device %s of type %s",
+                    device_id,
+                    reported_type,
+                )
+                continue
+
+            states[device_id] = self._parse_device_state(state_data, device)
 
         return states
 
