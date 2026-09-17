@@ -133,16 +133,22 @@ async def exchange_code_for_tokens(
         "Auth0-Client": AUTH0_CLIENT_APP,
         "Content-Type": "application/json",
     }
-    async with session.post(OAUTH_TOKEN_URL, json=token_data, headers=headers) as resp:
-        if resp.status != 200:
-            text = await resp.text()
-            if "invalid_grant" in text:
-                raise AuthenticationError(
-                    "The authorization code was rejected. It may have expired or "
-                    "already been used - please restart the login and paste a fresh code."
-                )
-            raise AuthenticationError(f"Token exchange failed: {resp.status} - {text}")
-        return await resp.json()
+    try:
+        async with session.post(OAUTH_TOKEN_URL, json=token_data, headers=headers) as resp:
+            if resp.status != 200:
+                text = await resp.text()
+                if "invalid_grant" in text:
+                    raise AuthenticationError(
+                        "The authorization code was rejected. It may have expired or "
+                        "already been used - please restart the login and paste a fresh code."
+                    )
+                raise AuthenticationError(f"Token exchange failed: {resp.status} - {text}")
+            return await resp.json()
+    except aiohttp.ClientError as err:
+        raise AuthenticationError(
+            f"Connection error while exchanging the code for tokens: {err}. "
+            "Try again."
+        ) from err
 
 
 class ResideoAuth:
