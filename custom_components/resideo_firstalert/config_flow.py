@@ -130,7 +130,15 @@ class ResideoOAuth2FlowHandler(
                     email = data.get("contactEmail", "unknown")
 
                     await self.async_set_unique_id(user_id)
-                    self._abort_if_unique_id_configured()
+                    # If this account is already configured, refresh its stored
+                    # token instead of just erroring - handles the case where a
+                    # leftover entry from an earlier version has a dead token.
+                    self._abort_if_unique_id_configured(
+                        updates={
+                            CONF_REFRESH_TOKEN: refresh_token,
+                            CONF_TOKEN: {"refresh_token": refresh_token},
+                        }
+                    )
 
                     title = f"First Alert ({email})"
                     if first_name:
@@ -208,7 +216,12 @@ class ResideoOAuth2FlowHandler(
                     last_name = data.get("lastName", "")
 
                     await self.async_set_unique_id(user_id)
-                    self._abort_if_unique_id_configured()
+                    self._abort_if_unique_id_configured(
+                        updates={
+                            CONF_REFRESH_TOKEN: refresh_token,
+                            CONF_TOKEN: {"refresh_token": refresh_token},
+                        }
+                    )
 
                     title = f"First Alert ({email})"
                     if first_name:
@@ -284,7 +297,12 @@ class ResideoOAuth2FlowHandler(
                 last_name = data.get("lastName", "")
 
                 await self.async_set_unique_id(user_id)
-                self._abort_if_unique_id_configured()
+                self._abort_if_unique_id_configured(
+                    updates={
+                        CONF_REFRESH_TOKEN: refresh_token,
+                        CONF_TOKEN: {"refresh_token": refresh_token},
+                    }
+                )
 
                 title = f"First Alert ({email})"
                 if first_name:
