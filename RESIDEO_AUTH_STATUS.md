@@ -1,6 +1,19 @@
 # Resideo Auth Investigation — Status
 
-Last updated 2026-09-16 (second update same day). Earlier updates are preserved below, most recent first.
+Last updated 2026-09-17. Earlier updates are preserved below, most recent first.
+
+## 2026-09-17 update: PR upstreamed, real bug found and fixed (v1.5.1)
+
+Opened three PRs against `rheeloaded/ha-resideo-firstalert`'s `browser-assisted-login` branch (the maintainer situation settled: `rheeloaded` is taking over as maintainer given the depth of their work on the captcha/rotation/filtering fixes, this fork continuing as a contributor rather than a competing fork):
+
+- [#1](https://github.com/rheeloaded/ha-resideo-firstalert/pull/1) — the host-migration fix (`api.ha.resideo.com`), scoped narrowly to just that plus the legacy-auth nonce/challenge fix. Left out the `dc` sensor option and brand icons (unrelated, already have their own open PRs against the original repo) and this status doc (personal notes, not a contribution).
+- [#2](https://github.com/rheeloaded/ha-resideo-firstalert/pull/2) / [#3](https://github.com/rheeloaded/ha-resideo-firstalert/pull/3) — the `dc` sensor option and brand icons, opened separately against the same branch so they're not stuck forever on the dead original repo.
+
+`almoney` reported "An unknown error occurred" pasting the browser-login code on PR #1. Root cause: `auth.py::exchange_code_for_tokens` was the one network call in the whole codebase that didn't wrap `aiohttp.ClientError` into a domain exception — every other request (`api.py::_request`) does. A transient connection hiccup during the token-exchange POST to `login.resideo.com` (exactly the kind of thing hit repeatedly against GitHub's API this same day) would propagate as a raw aiohttp exception, which `config_flow.py`'s except chain doesn't specifically handle, so it fell into the generic "unknown error" catch-all instead of a real message. Fixed on both `main` and the PR #1 branch. Shipped as `v1.5.1`, confirmed working end-to-end on a real account (delete + re-add, browser login, succeeded cleanly).
+
+Also caught and fixed in passing: the earlier `v1.5.0-beta3` merge had force-replaced `strings.json`/`translations/en.json` wholesale with `rheeloaded`'s versions, which silently dropped the `"dc": "DC Power"` translation label from PR #9 — `sensor.py`'s options list still included `"dc"` as valid, just with no label. Restored on `main`.
+
+Set up a recurring check (every 30 min, session-local) watching PR #1 for review activity.
 
 ## 2026-09-16 update #2: the "outage" was actually a host migration — fixed
 
