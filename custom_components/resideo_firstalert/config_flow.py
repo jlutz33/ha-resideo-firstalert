@@ -14,6 +14,7 @@ from homeassistant.config_entries import (
     OptionsFlow,
 )
 from homeassistant.const import CONF_TOKEN
+from homeassistant.data_entry_flow import AbortFlow
 from homeassistant.core import callback
 from homeassistant.helpers import config_entry_oauth2_flow
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -154,6 +155,11 @@ class ResideoOAuth2FlowHandler(
                 errors["base"] = "cannot_connect"
             except ResideoApiError:
                 errors["base"] = "cannot_connect"
+            except AbortFlow:
+                # _abort_if_unique_id_configured() raises this to abort the flow
+                # cleanly (e.g. "already configured") - let it propagate instead
+                # of reporting it as an unknown error.
+                raise
             except Exception:
                 _LOGGER.exception("Unexpected exception during browser login")
                 errors["base"] = "unknown"
@@ -232,6 +238,8 @@ class ResideoOAuth2FlowHandler(
                 errors["base"] = "cannot_connect"
             except ResideoApiError:
                 errors["base"] = "cannot_connect"
+            except AbortFlow:
+                raise
             except Exception:
                 _LOGGER.exception("Unexpected exception during login")
                 errors["base"] = "unknown"
@@ -300,6 +308,8 @@ class ResideoOAuth2FlowHandler(
                 errors["base"] = "cannot_connect"
             except ResideoApiError:
                 errors["base"] = "cannot_connect"
+            except AbortFlow:
+                raise
             except Exception:
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
