@@ -116,7 +116,7 @@ async def async_get_auth_implementation(
 async def async_get_description_placeholders(hass: HomeAssistant) -> dict[str, str]:
     """Return description placeholders for the credentials form."""
     return {
-        "more_info_url": "https://github.com/aidenmitchell/ha-resideo-firstalert#oauth-setup",
+        "more_info_url": "https://github.com/jlutz33/ha-resideo-firstalert#oauth-setup",
         "oauth_consent_url": OAUTH_AUTHORIZE_URL,
-        "oauth_creds_url": "https://github.com/aidenmitchell/ha-resideo-firstalert#getting-started",
+        "oauth_creds_url": "https://github.com/jlutz33/ha-resideo-firstalert#getting-started",
     }

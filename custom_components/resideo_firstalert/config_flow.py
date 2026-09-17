@@ -87,7 +87,7 @@ class ResideoOAuth2FlowHandler(
             step_id="user",
             menu_options=["browser", "login", "manual"],
             description_placeholders={
-                "docs_url": "https://github.com/aidenmitchell/ha-resideo-firstalert#authentication"
+                "docs_url": "https://github.com/jlutz33/ha-resideo-firstalert#authentication"
             },
         )
 
@@ -337,7 +337,7 @@ class ResideoOAuth2FlowHandler(
             data_schema=vol.Schema({vol.Required(CONF_REFRESH_TOKEN): str}),
             errors=errors,
             description_placeholders={
-                "docs_url": "https://github.com/aidenmitchell/ha-resideo-firstalert#getting-your-refresh-token"
+                "docs_url": "https://github.com/jlutz33/ha-resideo-firstalert#getting-your-refresh-token"
             },
         )
 

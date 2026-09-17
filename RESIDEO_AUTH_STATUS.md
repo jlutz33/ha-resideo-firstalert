@@ -1,6 +1,20 @@
 # Resideo Auth Investigation — Status
 
-Last updated 2026-09-17. Earlier updates are preserved below, most recent first.
+Last updated 2026-09-17 (closing update). Earlier updates are preserved below, most recent first.
+
+## 2026-09-17 closing update: PR #1 merged, resolved end to end, docs cleaned up
+
+**`rheeloaded/ha-resideo-firstalert#1` is merged** (2026-09-17T21:00:43Z, merged directly by `rheeloaded`, no formal review left). It carries the full arc: the host-migration fix, the browser-login redirect improvement, device-type filtering, the `exchange_code_for_tokens` network-error fix (`v1.5.1`), and the `AbortFlow`/token-refresh-on-reconfigure fix (`v1.5.2`/`v1.5.3`).
+
+**`almoney`'s case fully resolved** — turned out to be neither bug we chased: they'd disabled their existing config entry at some point (to avoid lockout noise) and forgot. Re-enabling it fixed things immediately. The two real bugs we found and fixed along the way (`exchange_code_for_tokens` swallowing network errors, `AbortFlow` getting caught by a bare `except Exception`) are still genuine, worthwhile fixes — just not what was actually wrong for `almoney` specifically. Good example of chasing a report to a real root cause even when it isn't the one that started the investigation.
+
+**Independent confirmation from `pjschaffer`** on the original PR #14 thread: updated, confirmed working, and — as an unprompted bonus — confirmed the `"dc": "DC Power"` translation fix too (a battery-powered detector now shows the correct label instead of an error).
+
+**`zackwag`** (a separate, independently-built integration — not a fork of this one, first commit 2026-07-19) already had the host-migration fix by the time we checked (commit `31bd8c8`, `2026-09-16T21:33:00Z`) — but the timing (35 minutes after our own PR #14 announcement, on a thread they were actively watching) suggests they picked it up from us rather than found it independently. Flagged them on PR #14 pointing at PR #1's later fixes (`AbortFlow`, token-refresh-on-reconfigure) in case the same patterns apply to their own `config_flow.py`, since they might not otherwise see activity on a different repo's PR.
+
+**Documentation pass**: `README.md`, `manifest.json` (`documentation`/`issue_tracker` links), and the in-UI `docs_url` links in `config_flow.py`/`application_credentials.py` were all still pointing at the dead `aidenmitchell/ha-resideo-firstalert` repo — fixed to point at this fork. Also fixed two real staleness bugs in `README.md` itself: the documented `API Base URL` still said the old host, and the Power Source sensor table didn't list `dc` as a valid value (the PR #9 fix). Left `manifest.json`'s `codeowners` (`@aidenmitchell`) alone — that's an attribution call, not a documentation-accuracy one.
+
+**Current state**: `main` is at `v1.5.3`, confirmed working end-to-end on this fork's own install and independently by two other users. PR #1 upstream is merged. Nothing outstanding.
 
 ## 2026-09-17 update: PR upstreamed, real bug found and fixed (v1.5.1)
 

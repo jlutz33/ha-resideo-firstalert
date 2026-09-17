@@ -28,7 +28,7 @@ A custom Home Assistant integration for First Alert Safe & Sound smoke/CO detect
 
 1. Open HACS in Home Assistant
 2. Click the three dots menu → Custom repositories
-3. Add `https://github.com/aidenmitchell/ha-resideo-firstalert` with category "Integration"
+3. Add `https://github.com/jlutz33/ha-resideo-firstalert` with category "Integration"
 4. Search for "First Alert by Resideo" and install
 5. Restart Home Assistant
 
@@ -129,7 +129,7 @@ For each smoke detector, the following entities are created:
 | Entity | Description | Default |
 |--------|-------------|---------|
 | Battery Status | `good` or `low` | Enabled |
-| Power Source | `ac` or `battery` | Enabled |
+| Power Source | `ac`, `battery`, or `dc` | Enabled |
 | Smoke Status | `idle` or `alarm` | Enabled |
 | CO Status | `idle` or `alarm` | Enabled |
 | Test Status | `idle` or `testing` | Enabled |
@@ -230,6 +230,12 @@ Your refresh token may have expired. Use the **Configure** option to update your
 ### "Unable to connect" error
 Check your internet connection and verify the Resideo API is accessible.
 
+### "Resideo's service is temporarily unavailable" error
+This means your login/token is fine but Resideo's backend itself is having trouble (a real outage or maintenance, not something wrong with your setup). No action needed - it should recover on its own; no need to delete or re-add the integration.
+
+### "This account is already configured" when re-adding
+If you already have a working entry and try to add the integration again (e.g. after testing an update), signing in again refreshes the existing entry's token and reloads it rather than creating a duplicate - the abort message is expected, and your existing entry should now be working with a fresh token.
+
 ### Devices not showing
 Make sure your devices are properly set up in the First Alert app and are online.
 
@@ -251,7 +257,7 @@ All entities and device data will be removed. No additional cleanup is required.
 ## Technical Details
 
 - **Polling Interval**: 60 seconds (configurable from 5-3600 seconds)
-- **API Base URL**: `https://api.resideo.com`
+- **API Base URL**: `https://api.ha.resideo.com` (Resideo retired `api.resideo.com` in Sept 2026; see `RESIDEO_API.md` for details)
 - **Authentication**: OAuth 2.0 with PKCE via Auth0
 
 ## Privacy Note
@@ -273,7 +279,7 @@ MIT License - See LICENSE file for details.
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/aidenmitchell/ha-resideo-firstalert.git
+   git clone https://github.com/jlutz33/ha-resideo-firstalert.git
    cd ha-resideo-firstalert
    ```
 
